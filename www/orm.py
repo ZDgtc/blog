@@ -1,7 +1,12 @@
 # -*- coding: utf-8 -*-
 
+"""
+编写orm，将对数据库操作转换为对象操作
+"""
+
 import asyncio
-import logging; logging.basicConfig(level=logging.INFO)
+import logging
+logging.basicConfig(level=logging.INFO)
 import aiomysql
 
 
