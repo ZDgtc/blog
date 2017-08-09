@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 import functools
 import asyncio
 import os
@@ -6,30 +8,26 @@ import logging
 
 from urllib import parse
 from aiohttp import web
+from www.apis import APIError
 
 
-# 定义一个get装饰器，为装饰的函数添加GET URL信息
-def get(path):
+# 定义一个生成装饰器的模板，为装饰的函数添加URL信息
+def de_generator(path, *, method):
     def decorator(func):
         @functools.wraps(func)  # 把func的__name__等属性复制到wrapper()函数
         def wrapper(*args, **kw):
             return func(*args, **kw)
-        wrapper.__method__ = 'GET'
+        wrapper.__method__ = method
         wrapper.__route__ = path
         return wrapper
     return decorator
 
 
-# 定义一个POST装饰器，为装饰的函数添加POST URL信息
-def post(path):
-    def decorator(func):
-        @functools.wraps(func)
-        def wrapper(*args, **kw):
-            return func(*args, **kw)
-        wrapper.__method__ = 'POST'
-        wrapper.__route__ = path
-        return wrapper
-    return decorator
+# 利用偏函数批量生成四个装饰器
+get = functools.partial(de_generator,method='GET')
+post = functools.partial(de_generator, method='POST')
+put = functools.partial(de_generator, method='PUT')
+delete = functools.partial(de_generator, method='DELETE')
 
 
 # 获取无默认值的强制关键字参数，即带*参数之后的参数，必须以param=value传递
@@ -90,7 +88,7 @@ def has_request_args(fn):
 # 封装一个URL处理函数
 class RequestHandler(object):
 
-    # 初始化参数
+    # fn是一个url处理函数，获取其需要的参数
     def __init__(self, app, fn):
         self._app = app
         self._func = fn
@@ -100,7 +98,7 @@ class RequestHandler(object):
         self._name_kw_args = get_named_kw_args(fn)
         self._required_kw_args = get_required_kw_args(fn)
 
-    # 定义一个__call__方法，可以将RequestHandler类的实例视为函数
+    # 定义一个__call__方法，可以将RequestHandler类的实例视为函数，传入的参数为request
     @asyncio.coroutine
     def __call__(self, request):
         kw = None
@@ -133,10 +131,10 @@ class RequestHandler(object):
                     for k, v in parse.parse_qs(qs, True).items():
                         kw[k] = v[0]
         if kw is None:
-            # match_info 会返回一个包含request所有keyword_only类型参数的字典
+            # match_info会返回一个包含request所有keyword_only类型参数的字典
             kw = dict(**request.match_info)
         else:
-            # 若kw之前已经被赋值，且fn函数不包含关键字参数，包含强制关键字
+            # 若url处理函数不包含关键字参数，包含强制关键字参数,只保留kw从request获取的强制关键字参数和值
             if not self._has_var_kw_args and self._name_kw_args:
                 copy = dict()
                 # 仅保留强制关键字参数
@@ -144,15 +142,65 @@ class RequestHandler(object):
                     if name in kw:
                         copy[name] = kw[name]
                 kw = copy
-            # 检查强制关键字参数
+            # 检查request是否包含最新的强制关键字参数
             for k, v in request.match_info.items():
                 if k in kw:
                     logging.warning('Duplicate arg name in named arg and kw args: %s' % k)
                 kw[k] = v
+        # 若url处理函数需要request参数，将request传入
         if self._has_request_args:
             kw['request'] = request
-        # 检查无默认值的强制关键字参数是否存在kw中
+        # 若request没有提供无默认值的强制关键字参数需要的值，报错
         if self._required_kw_args:
             for name in self._required_kw_args:
-                if not name in kw:
+                if name not in kw:
                     return web.HTTPBadRequest(text='Missing argument: %s' % name)
+        logging.info('call with args: %s' % str(kw))
+        # 将收集好的kw传递给fn处理函数，异步调用
+        try:
+            r = yield from self._func(**kw)
+            return r
+        except APIError as e:
+            return dict(error=e.error, data=e.data, message=e.message)
+
+
+# 用于注册URL处理函数
+def add_route(app, fn):
+    method = getattr(fn, '__method__', None)
+    path = getattr(fn, '__route__', None)
+    if method is None or path is None:
+        return ValueError('@get or @post not defined in %s.' % str(fn))
+    if not asyncio.iscoroutinefunction(fn) and not inspect.isgeneratorfunction(fn):
+        fn = asyncio.coroutine(fn)
+    logging.info('add route %s %s => %s(%s)' %
+                 (method, path, fn.__name__, ', '.join(inspect.signature(fn).parameters.keys())))
+    # RequestHandler的实例可以被直接调用
+    app.router.add_route(method, path, RequestHandler(app, fn))
+
+
+# 用于批量注册URL处理函数
+def add_routes(app, module_name):
+    # 查找'.'出现的位置
+    n = module_name.rfind('.')
+    # 未找到
+    if n == -1:
+        mod = __import__(module_name, globals(), locals())
+    else:
+        name = module_name[n+1:]
+        mod = getattr(__import__(module_name[:n], globals(), locals(), [name], 0), name)
+    for attr in dir(mod):
+        if attr.startswith('_'):
+            continue
+        fn = getattr(mod, attr)
+        if callable(fn):
+            method = getattr(fn, '__method__', None)
+            path = getattr(fn, '__route__', None)
+            if path and method:
+                add_route(app, fn)
+
+
+# 静态文件路径
+def add_static(app):
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)),'static')
+    app.router.add_static('/static/', path)
+    logging.info('add static %s => %s' % ('/static/', path))
