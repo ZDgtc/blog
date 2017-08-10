@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from www import config_default
+from www.config import config_default, config_override
 
 
 def merge(defaults, override):
@@ -21,9 +21,8 @@ def merge(defaults, override):
         return r
 
 
-configs = config_default.configs
+default_configs = config_default.configs
 try:
-    from www import config_override
-    configs = merge(configs, config_override.configs)
+    configs = merge(default_configs, config_override.configs)
 except ImportError:
     pass

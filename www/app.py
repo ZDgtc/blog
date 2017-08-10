@@ -1,18 +1,15 @@
 # -*- coding: utf-8 -*-
 
-import logging
 import asyncio
-import os
 import json
+import logging
+import os
 import time
-
 from datetime import datetime
 
 from aiohttp import web
 from jinja2 import Environment, FileSystemLoader
 
-import www.orm as orm
-from www.coroweb import add_routes, add_static
 logging.basicConfig(level=logging.INFO)
 
 
@@ -37,7 +34,7 @@ def init_jinja2(app, **kw):
             env.filters[name] = f
     app['__templating__'] = env
 
-
+# 用于记录时间
 def datetime_filter(t):
     delta = int(time.time()-t)
     if delta < 60:
@@ -96,6 +93,7 @@ def response_factory(app, handler):
             else:
                 # 若返回值包含jinja2模板，绑定用户，渲染模板
                 r['__user__'] = request.__user__
+                # 注意渲染语句Environment.get_template().render(dict).encode('utf-8)
                 resp = web.Response(body=app['__templating__'].get_template(template).render(**r).encode('utf-8'))
                 resp.content_type = 'text/html;charset=utf-8'
                 return resp
@@ -111,25 +109,3 @@ def response_factory(app, handler):
         return resp
     return response
 
-
-def index(request):
-    return web.Response(body=b'<h1>Awesome</h1>', content_type='text/html')
-
-
-# 定义一个协程函数
-@asyncio.coroutine
-def init(loop):
-    # 定义一个app
-    app = web.Application(loop=loop)
-    # 根目录的GET方法路由到index
-    app.router.add_route('GET', '/', index)
-    # 遇到io阻塞，中断返回
-    srv = yield from loop.create_server(app.make_handler(), '127.0.0.1', 9000)
-    logging.info('server started at http://127.0.0.1:9000...')
-    return srv
-
-# 获取一个事件循环
-loop = asyncio.get_event_loop()
-# 将loop作为参数传递给init，同时将协程函数init放入事件循环
-loop.run_until_complete(init(loop))
-loop.run_forever()

@@ -21,6 +21,7 @@ def create_pool(loop, **kw):
     global __pool
     __pool = yield from aiomysql.create_pool(
         host=kw.get('host', 'localhost'),
+        # 注意port是int类型，不是str
         port=kw.get('port', 3306),
         user=kw['user'],
         password=kw['password'],
@@ -33,7 +34,7 @@ def create_pool(loop, **kw):
     )
 
 
-# 定义select操作
+# 定义select操作，传入ModelMetaclass根据Model类组织的sql语句
 @asyncio.coroutine
 def select(sql, args, size=None):
     log(sql, args)
@@ -41,8 +42,9 @@ def select(sql, args, size=None):
     with (yield from __pool) as conn:
         # 从连接池获取一个cursor
         cur = yield from conn.cursor(aiomysql.DictCursor)
-        # 执行sql语句
+        # 将sql语句中的?替换为%s，并加入args参数
         yield from cur.execute(sql.replace('?', '%s'), args or ())
+        # 是否有结果条数的要求
         if size:
             rs = yield from cur.fetchmany(size)
         else:
@@ -166,10 +168,12 @@ class ModelMetaclass(type):
         return type.__new__(cls, name, bases, attrs)
 
 
+# 这里可以看出，Model实际是一个字典类型
 class Model(dict, metaclass=ModelMetaclass):
     def __init__(self, **kw):
         super(Model, self).__init__(**kw)
 
+    # 获取某个属性的值，这里是某个列字段的值
     def __getattr__(self, key):
         try:
             return self[key]
@@ -186,6 +190,7 @@ class Model(dict, metaclass=ModelMetaclass):
         value = getattr(self, key, None)
         if value is None:
             field = self.__mappings__[key]
+            # 若实例化Model时没有为某一列字段赋值，则检查其是否有默认值
             if field.default is not None:
                 value = field.default() if callable(field.default) else field.default
                 logging.debug('using default value for %s: %s' % (key, str(value)))

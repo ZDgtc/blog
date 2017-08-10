@@ -188,6 +188,7 @@ def add_routes(app, module_name):
     else:
         name = module_name[n+1:]
         mod = getattr(__import__(module_name[:n], globals(), locals(), [name], 0), name)
+    # 对于mod模块里面的方法
     for attr in dir(mod):
         if attr.startswith('_'):
             continue
@@ -200,7 +201,10 @@ def add_routes(app, module_name):
 
 
 # 静态文件路径
-def add_static(app):
-    path = os.path.join(os.path.dirname(os.path.abspath(__file__)),'static')
-    app.router.add_static('/static/', path)
+def add_static(app, path=None):
+    if path:
+        static_path = path
+    else:
+        static_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),'static')
+    app.router.add_static('/static/', static_path)
     logging.info('add static %s => %s' % ('/static/', path))
