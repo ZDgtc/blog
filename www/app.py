@@ -92,7 +92,6 @@ def response_factory(app, handler):
                 return resp
             else:
                 # 若返回值包含jinja2模板，绑定用户，渲染模板
-                r['__user__'] = request.__user__
                 # 注意渲染语句Environment.get_template().render(dict).encode('utf-8)
                 resp = web.Response(body=app['__templating__'].get_template(template).render(**r).encode('utf-8'))
                 resp.content_type = 'text/html;charset=utf-8'

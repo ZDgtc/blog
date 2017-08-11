@@ -18,7 +18,7 @@ def merge(defaults, override):
         else:
             # 若无相同项，使用默认值
             r[name] = defaults[name]
-        return r
+    return r
 
 
 default_configs = config_default.configs

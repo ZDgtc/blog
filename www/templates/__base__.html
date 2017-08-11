@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    {% block meta %}<!-- block meta  -->{% endblock %}
+    <title>{% block title %} ? {% endblock %} - 庄达的博客</title>
+    <script src="../static/js/jquery-3.2.1.min.js"></script>
+    <script src="../static/js/uikit.min.js"></script>
+    <script src="../static/js/uikit-icons.min.js"></script>
+    <link rel="stylesheet" href="../static/css/uikit-rtl.min.css">
+    <link rel="stylesheet" href="../static/css/uikit.min.css">
+    {% block beforehead %}<!-- before head  -->{% endblock %}
+</head>
+<body>
+<nav class="uk-navbar-container" uk-navbar>
+
+    <div class="uk-navbar-left uk-margin-left">
+        <a href="/" class="uk-logo">Blog</a>
+        <ul class="uk-navbar-nav uk-margin-small-left">
+            <li data-url="blogs"><a href="/"><span class="uk-margin-small-right" uk-icon="icon: home"></span> 日志</a></li>
+            <li>
+                <a href="#"><span class="uk-margin-small-right" uk-icon="icon: copy"></span>教程</a>
+                <div class="uk-navbar-dropdown">
+                    <ul class="uk-nav uk-navbar-dropdown-nav">
+                        <li><a href="#">Python</a></li>
+                        <li><a href="#">Java</a></li>
+                    </ul>
+                </div>
+            </li>
+            <li><a href="#"><span class="uk-margin-small-right" uk-icon="icon: code"></span>源码</a></li>
+        </ul>
+    </div>
+
+    <div class="uk-navbar-right uk-margin-right">
+
+        <ul class="uk-navbar-nav">
+        {% if user %}
+            <li class="uk-active"><a href="#">Active</a></li>
+            <li>
+                <a href="#">Parent</a>
+                <div class="uk-navbar-dropdown">
+                    <ul class="uk-nav uk-navbar-dropdown-nav">
+                        <li class="uk-active"><a href="#">Active</a></li>
+                        <li><a href="#">Item</a></li>
+                        <li><a href="#">Item</a></li>
+                    </ul>
+                </div>
+            </li>
+            <li><a href="#">Item</a></li>
+        </ul>
+
+    </div>
+
+</nav>
+</body>
+</html>
