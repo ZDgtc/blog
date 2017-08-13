@@ -1,0 +1,30 @@
+{% extends '__base__.html' %}
+
+{% block title %}日志{% endblock %}
+
+{% block content %}
+
+    <div class="uk-width-3-4">
+        {% for blog in blogs %}
+            <article class="uk-article">
+                <h2><a href="/blog/{{ blog.id }}">{{ blog.name }}</a></h2>
+                <p class="uk-article-meta">发表于{{ blog.created_at|datetime }}</p>
+                <p>{{ blog.summary }}</p>
+                <p><a href="/blog/{{ blog.id }}">继续阅读<i uk-icon="icon: chevron-right"></i></a></p>
+            </article>
+        {% endfor %}
+    </div>
+
+    <div class="uk-width-1-4">
+        <div class="uk-panel uk-panel-header">
+            <h3 class="uk-panel-title">推荐</h3>
+            <ul class="uk-list">
+                <li><i class="uk-icon-thumbs-o-up"></i> <a target="_blank" href="https://www.liaoxuefeng.com/wiki/0014316089557264a6b348958f449949df42a6d3a2e542c000">Python教程</a></li>
+                <li><i class="uk-icon-thumbs-o-up"></i> <a target="_blank" href="#">读书</a></li>
+                <li><i class="uk-icon-thumbs-o-up"></i> <a target="_blank" href="#">Python教程</a></li>
+                <li><i class="uk-icon-thumbs-o-up"></i> <a target="_blank" href="http://demo.pythoner.com/itt2zh/index.html">Introduction to Tornado</a></li>
+            </ul>
+        </div>
+    </div>
+
+{% endblock %}

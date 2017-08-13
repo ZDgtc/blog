@@ -1,0 +1,31 @@
+{% extends '__base__.html' %}
+
+{% block title %}注册{% endblock %}
+
+{% block beforehead %}
+    <script>
+        function validateEmail(email) {
+            var re = /^[a-zA-Z0-9._-]+@([a-zA-Z0-9_-])+(\.[a-zA-Z0-9_-]+){1,4}$/;
+            return re.test(email);
+        }
+        $(function (){
+            var vm = new Vue({
+                el: '#vm',
+                data: {
+                    name: '',
+                    email: '',
+                    password1: '',
+                    password2: ''
+                },
+                methods: {
+                    submit: function (event) {
+                        event.preventDefault();
+                    }
+                }
+            })
+        })
+
+
+
+    </script>
+{% endblock %}

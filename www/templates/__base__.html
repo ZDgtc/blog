@@ -5,16 +5,19 @@
     {% block meta %}<!-- block meta  -->{% endblock %}
     <title>{% block title %} ? {% endblock %} - 庄达的博客</title>
     <script src="../static/js/jquery-3.2.1.min.js"></script>
+    <script src="../static/js/vue.min.js"></script>
     <script src="../static/js/uikit.min.js"></script>
     <script src="../static/js/uikit-icons.min.js"></script>
     <link rel="stylesheet" href="../static/css/uikit-rtl.min.css">
+    <link rel="stylesheet" href="../static/css/uikit2.min.css">
     <link rel="stylesheet" href="../static/css/uikit.min.css">
     {% block beforehead %}<!-- before head  -->{% endblock %}
 </head>
 <body>
+<div uk-sticky="sel-target: .uk-navbar-container; cls-active: uk-navbar-sticky">
 <nav class="uk-navbar-container" uk-navbar>
 
-    <div class="uk-navbar-left uk-margin-left">
+    <div class="uk-navbar-left uk-margin-auto-left">
         <a href="/" class="uk-logo">Blog</a>
         <ul class="uk-navbar-nav uk-margin-small-left">
             <li data-url="blogs"><a href="/"><span class="uk-margin-small-right" uk-icon="icon: home"></span> 日志</a></li>
@@ -31,26 +34,48 @@
         </ul>
     </div>
 
-    <div class="uk-navbar-right uk-margin-right">
-
+    <div class="uk-navbar-right uk-margin-auto-right">
         <ul class="uk-navbar-nav">
         {% if user %}
-            <li class="uk-active"><a href="#">Active</a></li>
             <li>
-                <a href="#">Parent</a>
+                <a href="#"><span class="uk-margin-small-right" uk-icon="icon: user"></span>{{ user.name }}</a>
                 <div class="uk-navbar-dropdown">
                     <ul class="uk-nav uk-navbar-dropdown-nav">
-                        <li class="uk-active"><a href="#">Active</a></li>
-                        <li><a href="#">Item</a></li>
-                        <li><a href="#">Item</a></li>
+                        <li><a href="/signout"><span class="uk-margin-small-right" uk-icon="icon: sign-out"></span>登出</a></li>
                     </ul>
                 </div>
             </li>
-            <li><a href="#">Item</a></li>
+        {% else %}
+            <li><a href="/signin"><span class="uk-margin-small-right" uk-icon="icon: sign-in"></span>登录</a></li>
+            <li><a href="/register"><span class="uk-margin-small-right" uk-icon="icon: file-edit"></span>注册</a></li>
+        {% endif %}
         </ul>
-
     </div>
 
 </nav>
+</div>
+<div class="uk-container uk-margin-top">
+    <div uk-grid>
+        {% block content %}
+        {% endblock %}
+    </div>
+</div>
+
+<div class="uk-margin-large-top" style="background-color:#f8f8f8; border-top:1px solid #ccc;">
+    <div class="uk-container uk-text-center">
+        <div class="uk-panel uk-margin-top uk-margin-bottom">
+            <p>
+                <a target="_blank" href="#" class="uk-icon-button uk-icon-weibo"></a>
+                <a target="_blank" href="#" class="uk-icon-button uk-icon-github"></a>
+                <a target="_blank" href="#" class="uk-icon-button uk-icon-linkedin-square"></a>
+                <a target="_blank" href="#" class="uk-icon-button uk-icon-twitter"></a>
+            </p>
+            <p>Powered by <a href="#">Zhuang Da</a>.
+                Copyright &copy; 2017.
+            </p>
+        </div>
+    </div>
+</div>
+
 </body>
 </html>
