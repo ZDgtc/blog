@@ -44,6 +44,14 @@ def index(request):
     }
 
 
+@get('/register')
+def register():
+    return {
+        '__template__': 'register.html'
+    }
+
+
+
 @post('/api/users')
 @asyncio.coroutine
 def api_register_user(*, email, name, passwd):
@@ -73,3 +81,4 @@ def api_register_user(*, email, name, passwd):
     r.content_type = 'application/json'
     r.body = json.dumps(user, ensure_ascii=False).encode('utf-8')
     return r
+
