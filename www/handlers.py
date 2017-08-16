@@ -44,6 +44,7 @@ def index(request):
     }
 
 
+# 渲染注册页面
 @get('/register')
 def register():
     return {
@@ -51,7 +52,15 @@ def register():
     }
 
 
+# 渲染登录页面
+@get('/signin')
+def signin():
+    return {
+        '__template__': 'signin.html'
+    }
 
+
+# 用户注册api
 @post('/api/users')
 @asyncio.coroutine
 def api_register_user(*, email, name, passwd):
@@ -82,3 +91,31 @@ def api_register_user(*, email, name, passwd):
     r.body = json.dumps(user, ensure_ascii=False).encode('utf-8')
     return r
 
+
+# 用户登录api
+@post('/api/authenticate')
+@asyncio.coroutine
+def authenticate(*, email, passwd):
+    if not email:
+        raise APIValueError('email')
+    if not passwd:
+        raise APIValueError('passwd')
+    # 根据email取出相应的用户
+    users = yield from User.findAll(where='email=?', args=[email])
+    if len(users) == 0:
+        raise APIValueError('email', 'email not exist.')
+    user = users[0]
+    # 验证密码
+    sha1 = hashlib.sha1()
+    sha1.update(user.id.encode('utf-8'))
+    sha1.update(b':')
+    sha1.update(passwd.encode('utf-8'))
+    if user.passwd != sha1.hexdigest():
+        raise APIValueError('passwd', 'Invalid password.')
+    # 认证通过，设置cookie
+    r = web.Response()
+    r.set_cookie(COOKIE_NAME, user2cookie(user, 86400), max_age=86400, httponly=True)
+    user.passwd = '******'
+    r.content_type = 'application/json'
+    r.body = json.dumps(user, ensure_ascii=False).encode('utf-8')
+    return r

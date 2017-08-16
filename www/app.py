@@ -9,6 +9,7 @@ from datetime import datetime
 
 from aiohttp import web
 from jinja2 import Environment, FileSystemLoader
+from .handlers import COOKIE_NAME
 
 logging.basicConfig(level=logging.INFO)
 
@@ -108,3 +109,11 @@ def response_factory(app, handler):
         return resp
     return response
 
+
+# 改middleware用于在处理url之前解析cookie，并将登录用户绑定到request上
+@asyncio.coroutine
+def auth_factory(app, handler):
+    @asyncio.coroutine
+    def auth(request):
+        logging.info('check user: %s %s' % (request.method, request.path))
+        request.__user__ = None
