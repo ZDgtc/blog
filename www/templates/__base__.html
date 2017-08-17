@@ -46,7 +46,7 @@
                 <ul class="uk-navbar-nav">
                 {% if __user__ %}
                     <li><a href="#0"><i class="uk-icon-user"></i> {{ __user__.name }}</a></li>
-                    <li><a href="#0"><i class="uk-icon-sign-out"></i> 登出</a></li>
+                    <li><a href="/signout"><i class="uk-icon-sign-out"></i> 登出</a></li>
                 {% else %}
                     <li><a href="/signin"><i class="uk-icon-sign-in"></i> 登陆</a></li>
                     <li><a href="/register"><i class="uk-icon-edit"></i> 注册</a></li>

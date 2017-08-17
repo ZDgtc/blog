@@ -8,7 +8,7 @@ import logging
 
 from .coroweb import get, post
 from db.models import User, Blog, next_id
-from .apis import APIError, APIPermissionError, APIResourceNotFoundError, APIValueError
+from .apis import APIError, APIPermissionError, APIResourceNotFoundError, APIValueError, Page
 from aiohttp import web
 from .config.config import configs
 
@@ -107,6 +107,18 @@ def signin():
     }
 
 
+# 登出
+@get('/signout')
+def signout(request):
+    # 获取链接页面
+    referer = request.headers.get('Referer')
+    r = web.HTTPFound(referer or '/')
+    # 设置max age为0，使其在cookie2user函数返回None
+    r.set_cookie(COOKIE_NAME, '-deleted-', max_age=0, httponly=True)
+    logging.info('user sign out.')
+    return r
+
+
 # 渲染博客创建页面
 @get('/manage/blogs/create')
 def manage_create_blog(request):
@@ -115,8 +127,11 @@ def manage_create_blog(request):
         'id': '',
         'action': '/api/blogs',
         '__user__' : request.__user__
-
     }
+
+
+# 渲染管理页面
+
 
 # 用户注册api
 @post('/api/users')
@@ -200,6 +215,15 @@ def api_create_blogs(request, *, name, summary, content):
 @get('/api/blogs')
 @asyncio.coroutine
 def api_blogs(*, page='1'):
-
+    # 把page转化为整型
+    page_index = get_page_index(page)
+    # 查询日志条数
+    num = yield from Blog.findNumber('count(id)')
+    p = Page(num, page_index)
+    if num == 0:
+        return dict(page=p, blogs=())
+    # 根据limit选出当前页展示的博客
+    blogs = yield from Blog.findAll(orderBy='created_at desc',limit=(p.offset, p.limit))
+    return dict(page=p, blogs=blogs)
 
 
