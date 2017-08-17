@@ -4,12 +4,13 @@ import time
 import re
 import hashlib
 import json
+import logging
 
-from www.coroweb import get, post
+from .coroweb import get, post
 from db.models import User, Blog, next_id
-from www.apis import APIError, APIPermissionError, APIResourceNotFoundError, APIValueError
+from .apis import APIError, APIPermissionError, APIResourceNotFoundError, APIValueError
 from aiohttp import web
-from www.config.config import configs
+from .config.config import configs
 
 _RE_EMAIL = re.compile(r'^[a-zA-Z0-9._-]+@([a-zA-Z0-9_-])+(\.[a-zA-Z0-9_-]+){1,4}$')
 _RE_SHA1 = re.compile(r'^[0-9a-f]{40}$')
@@ -27,6 +28,51 @@ def user2cookie(user, max_age):
     return '-'.join(L)
 
 
+# 解析cookie，返回user对象
+@asyncio.coroutine
+def cookie2user(cookie_str):
+    if not cookie_str:
+        return None
+    try:
+        L = cookie_str.split('-')
+        if len(L) != 3:
+            return None
+        uid, expires, sha1 = L
+        if float(expires) < time.time():
+            return None
+        user = yield from User.find(uid)
+        if not user:
+            return None
+        # 根据cookie的uid，找到对应的user，根据user信息，组织字符串，再与cookie的最后一个字段比较
+        s = '%s-%s-%s-%s' % (uid, user.passwd, expires, _COOKIE_KEY)
+        if sha1 != hashlib.sha1(s.encode('utf-8')).hexdigest():
+            logging.info('invalid sha1')
+            return None
+        user.passwd = "******"
+        return user
+    except Exception as e:
+        logging.exception(e)
+        return None
+
+
+# 检查目前登录用户是否为admin
+def check_admin(request):
+    if request.__user__ is None or not request.__user__.admin:
+        raise APIPermissionError()
+
+
+# 页面选择函数，取整数
+def get_page_index(page_str):
+    p = 1
+    try:
+        p = int(page_str)
+    except ValueError as e:
+        pass
+    if p < 1:
+        p = 1
+    return p
+
+
 # 首页渲染
 @get('/')
 @asyncio.coroutine
@@ -40,7 +86,8 @@ def index(request):
     ]
     return {
         '__template__': 'blogs.html',
-        'blogs': blogs
+        'blogs': blogs,
+        '__user__': request.__user__ if request.__user__ else None
     }
 
 
@@ -59,6 +106,17 @@ def signin():
         '__template__': 'signin.html'
     }
 
+
+# 渲染博客创建页面
+@get('/manage/blogs/create')
+def manage_create_blog(request):
+    return {
+        '__template__' : 'manage_blog_edit.html',
+        'id': '',
+        'action': '/api/blogs',
+        '__user__' : request.__user__
+
+    }
 
 # 用户注册api
 @post('/api/users')
@@ -105,7 +163,7 @@ def authenticate(*, email, passwd):
     if len(users) == 0:
         raise APIValueError('email', 'email not exist.')
     user = users[0]
-    # 验证密码
+    # 验证密码，根据email找到userid，组织passwd并与数据库中的passwd进行比对
     sha1 = hashlib.sha1()
     sha1.update(user.id.encode('utf-8'))
     sha1.update(b':')
@@ -119,3 +177,29 @@ def authenticate(*, email, passwd):
     r.content_type = 'application/json'
     r.body = json.dumps(user, ensure_ascii=False).encode('utf-8')
     return r
+
+
+# 博客创建api
+@post('/api/blogs')
+@asyncio.coroutine
+def api_create_blogs(request, *, name, summary, content):
+    check_admin(request)
+    if not name or not name.strip():
+        raise APIValueError('name', 'name cannot be empty.')
+    if not summary or not summary.strip():
+        raise APIValueError('summary', 'summary cannot be empty.')
+    if not content or not content.strip():
+        raise APIValueError('content', 'content cannot be empty.')
+    blog = Blog(user_id=request.__user__.id, user_name=request.__user__.name, user_image=request.__user__.image,
+                name=name.strip(), summary=summary.strip(), content=content.strip())
+    yield from blog.save()
+    return blog
+
+
+# 获取博客列表api
+@get('/api/blogs')
+@asyncio.coroutine
+def api_blogs(*, page='1'):
+
+
+

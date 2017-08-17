@@ -3,7 +3,7 @@ import logging
 
 from aiohttp import web
 from www.coroweb import add_routes, add_static
-from www.app import init_jinja2, datetime_filter, logger_factory, response_factory
+from www.app import init_jinja2, datetime_filter, logger_factory, response_factory, auth_factory
 from db import orm
 from www.config.config import configs
 
@@ -15,7 +15,7 @@ def init(loop):
     # 创建数据库连接池，从config导入配置
     yield from orm.create_pool(loop, **configs['db'])
     # 指定拦截器
-    app = web.Application(loop=loop, middlewares=[logger_factory, response_factory])
+    app = web.Application(loop=loop, middlewares=[logger_factory, response_factory, auth_factory])
     # 初始化jinja2，
     init_jinja2(
         app,

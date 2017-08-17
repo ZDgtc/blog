@@ -9,7 +9,7 @@ from datetime import datetime
 
 from aiohttp import web
 from jinja2 import Environment, FileSystemLoader
-from .handlers import COOKIE_NAME
+from .handlers import COOKIE_NAME, cookie2user
 
 logging.basicConfig(level=logging.INFO)
 
@@ -88,7 +88,7 @@ def response_factory(app, handler):
             template = r.get('__template__')
             # 若不含模板，JSON序列化结果输出
             if template is None:
-                resp = web.Response(body=json.dumps(ensure_ascii=False, default=lambda o: o.__dict__).encode('utf-8'))
+                resp = web.Response(body=json.dumps(r, ensure_ascii=False, default=lambda o: o.__dict__).encode('utf-8'))
                 resp.content_type = 'application/json;charset=utf-8'
                 return resp
             else:
@@ -110,10 +110,23 @@ def response_factory(app, handler):
     return response
 
 
-# 改middleware用于在处理url之前解析cookie，并将登录用户绑定到request上
+# 改middleware用于在处理url之前解析cookie，并将登录用户绑定到request上，后续的url处理函数可以直接拿到登录用户
 @asyncio.coroutine
 def auth_factory(app, handler):
     @asyncio.coroutine
     def auth(request):
         logging.info('check user: %s %s' % (request.method, request.path))
         request.__user__ = None
+        # 取出本站登录cookie
+        cookie_str = request.cookies.get(COOKIE_NAME)
+        # 判断是否为合法cookie
+        if cookie_str:
+            user = yield from cookie2user(cookie_str)
+            # 若是，将user信息写入request
+            if user:
+                logging.info('set current user: %s' % user.email)
+                request.__user__ = user
+        return (yield from  handler(request))
+    return auth
+
+

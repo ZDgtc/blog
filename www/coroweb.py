@@ -8,7 +8,7 @@ import logging
 
 from urllib import parse
 from aiohttp import web
-from www.apis import APIError
+from .apis import APIError
 
 
 # 定义一个生成装饰器的模板，为装饰的函数添加URL信息
