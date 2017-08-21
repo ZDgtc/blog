@@ -43,7 +43,7 @@ class Page(object):
             self.page_index = 1
         else:
             self.page_index = page_index
-            # 当前页面显示博客的开始序列，第一页开始为0，第二页开始为每页博客数，以此类推
+            # 当前页面显示博客的开始序列，第一页开始为0，第二页开始为每页博客数乘以页数减一，以此类推
             self.offset = self.page_size * (page_index - 1)
             # 根据当前页面显示的博客数，决定sql操作的limit值
             self.limit = self.page_size

@@ -7,10 +7,11 @@ import json
 import logging
 
 from .coroweb import get, post
-from db.models import User, Blog, next_id
+from db.models import User, Blog, Comment,next_id
 from .apis import APIError, APIPermissionError, APIResourceNotFoundError, APIValueError, Page
 from aiohttp import web
 from .config.config import configs
+from .markdown2 import markdown
 
 _RE_EMAIL = re.compile(r'^[a-zA-Z0-9._-]+@([a-zA-Z0-9_-])+(\.[a-zA-Z0-9_-]+){1,4}$')
 _RE_SHA1 = re.compile(r'^[0-9a-f]{40}$')
@@ -27,6 +28,11 @@ def user2cookie(user, max_age):
     L = [user.id, expires, hashlib.sha1(s.encode('utf-8')).hexdigest()]
     return '-'.join(L)
 
+
+# 将评论格式转化为可以在网页端显示的格式
+def text2html(text):
+    lines = map(lambda s: '<p>%s</p>' % s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;'), filter(lambda s: s.strip() != '', text.split('\n')))
+    return ''.join(lines)
 
 # 解析cookie，返回user对象
 @asyncio.coroutine
@@ -107,32 +113,6 @@ def signin():
     }
 
 
-# 登出
-@get('/signout')
-def signout(request):
-    # 获取链接页面
-    referer = request.headers.get('Referer')
-    r = web.HTTPFound(referer or '/')
-    # 设置max age为0，使其在cookie2user函数返回None
-    r.set_cookie(COOKIE_NAME, '-deleted-', max_age=0, httponly=True)
-    logging.info('user sign out.')
-    return r
-
-
-# 渲染博客创建页面
-@get('/manage/blogs/create')
-def manage_create_blog(request):
-    return {
-        '__template__' : 'manage_blog_edit.html',
-        'id': '',
-        'action': '/api/blogs',
-        '__user__' : request.__user__
-    }
-
-
-# 渲染管理页面
-
-
 # 用户注册api
 @post('/api/users')
 @asyncio.coroutine
@@ -192,6 +172,102 @@ def authenticate(*, email, passwd):
     r.content_type = 'application/json'
     r.body = json.dumps(user, ensure_ascii=False).encode('utf-8')
     return r
+
+
+# 登出
+@get('/signout')
+def signout(request):
+    # 获取链接页面
+    referer = request.headers.get('Referer')
+    r = web.HTTPFound(referer or '/')
+    # 设置max age为0，使其在cookie2user函数返回None
+    r.set_cookie(COOKIE_NAME, '-deleted-', max_age=0, httponly=True)
+    logging.info('user sign out.')
+    return r
+
+
+# 获取博客详细内容api，截留blogs/后面的内容作为参数id
+@get('blogs/{id}')
+def get_blog(id):
+    blog = yield from Blog.find(id)
+    comments = yield from Comment.findAll('blog_id=?', [id], orderBy='created_at desc')
+    # 格式化为符合html的文本
+    for c in comments:
+        c.html_content = text2html(c.content)
+    blog.html_content = markdown(blog.content)
+    return {
+        '__template__': 'blog.html',
+        'blog': blog,
+        'comments': comments
+    }
+
+
+# 重定向到评论列表页
+@get('/manage/')
+def manage():
+    return 'redirect:/manage/comments'
+
+
+# 评论列表页
+@get('/manage/comments')
+def manage_comments(*, page='1'):
+    return {
+        '__template__': 'manage_comments.html',
+        'page_index': get_page_index(page)
+    }
+
+
+# 博客管理页
+@get('/manage/blogs')
+def manage_blogs(*, page='1'):
+    return {
+        '__template__': 'manage_blogs.html',
+        'page_index': get_page_index(page)
+    }
+
+
+# 博客创建页
+@get('/manage/blogs/create')
+def manage_create_blog(request):
+    return {
+        '__template__': 'manage_blog_edit.html',
+        'id': '',
+        'action': '/api/blogs',
+        '__user__': request.__user__
+    }
+
+
+# 博客修改页
+@get('/manage/blogs/edit')
+def manage_edit_blog(*, id):
+    return {
+        '__template__': 'manage_blog_edit.html',
+        'id': id,
+        'action': '/api/blogs/%s' % id
+    }
+
+
+# 用户列表页
+@get('/manage/users')
+def manage_users(*, page='1'):
+    return {
+        '__template__': 'manage_users.html',
+        'page_index': get_page_index(page)
+    }
+
+
+# 获取某一页显示的评论api
+def api_comments(*, page='1'):
+    page_index = get_page_index(page)
+    # 评论数
+    num = yield from Comment.findNumber('count(id)')
+    # 计算评论页
+    p = Page(num, page_index)
+    # 无评论，返回空字典
+    if num == 0:
+        return dict(page=p, comments=())
+    comments = yield from Comment.findAll(orderBy='created_at desc', limit=(p.offset, p.limit))
+    return dict(page=p, comments=comments)
 
 
 # 博客创建api
