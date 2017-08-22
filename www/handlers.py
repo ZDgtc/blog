@@ -6,12 +6,12 @@ import hashlib
 import json
 import logging
 
-from www.coroweb import get, post
+from coroweb import get, post
 from db.models import User, Blog, Comment,next_id
-from www.apis import APIError, APIPermissionError, APIResourceNotFoundError, APIValueError, Page
+from apis import APIError, APIPermissionError, APIResourceNotFoundError, APIValueError, Page
 from aiohttp import web
-from www.config.config import configs
-from www.markdown2 import markdown
+from config.config import configs
+from markdown2 import markdown
 
 _RE_EMAIL = re.compile(r'^[a-zA-Z0-9._-]+@([a-zA-Z0-9_-])+(\.[a-zA-Z0-9_-]+){1,4}$')
 _RE_SHA1 = re.compile(r'^[0-9a-f]{40}$')
@@ -85,6 +85,7 @@ def get_page_index(page_str):
 def index(request, * ,page='1'):
     page_index = get_page_index(page)
     num = yield from Blog.findNumber('count(id)')
+    logging.info('The number of blogs in index: %s' % num)
     page = Page(num, page_index)
     if num == 0:
         blogs = []
@@ -226,7 +227,7 @@ def manage_blogs(request, *, page='1'):
     return {
         '__template__': 'manage_blogs.html',
         'page_index': get_page_index(page),
-        'user': request.__user__
+        '__user__': request.__user__
     }
 
 
@@ -242,26 +243,29 @@ def manage_create_blog(request):
 
 
 # 博客修改页
-@get('/manage/blogs/edit/{id}')
-def manage_edit_blog(id, request):
+@get('/manage/blogs/edit')
+def manage_edit_blog(request, *, id):
     return {
         '__template__': 'manage_blog_edit.html',
         'id': id,
         'action': '/api/blogs/%s' % id,
-        'user': request.__user__,
+        '__user__': request.__user__
     }
 
 
 # 用户列表页
 @get('/manage/users')
-def manage_users(*, page='1'):
+def manage_users(request, *, page='1'):
     return {
         '__template__': 'manage_users.html',
-        'page_index': get_page_index(page)
+        'page_index': get_page_index(page),
+        '__user__': request.__user__
     }
 
 
 # 获取某一页所显示的评论api
+@get('/api/comments')
+@asyncio.coroutine
 def api_comments(*, page='1'):
     page_index = get_page_index(page)
     # 评论数
@@ -272,28 +276,30 @@ def api_comments(*, page='1'):
     if num == 0:
         return dict(page=p, comments=())
     comments = yield from Comment.findAll(orderBy='created_at desc', limit=(p.offset, p.limit))
+    logging.info('The number of comments in manage: %s' % len(comments))
     return dict(page=p, comments=comments)
 
 
 # 评论创建api
-@post('/api/blog/{id}/comments')
+@post('/api/blogs/{id}/comments')
+@asyncio.coroutine
 def api_create_comment(id, request, *, content):
-    user = request.__user__
-    if user is None:
-        raise APIPermissionError('Please signin first')
+    user = request.__user__ #登录再说
+    if not user:
+        raise APIPermissionError('Please signin first.')
     if not content or not content.strip():
-        raise APIValueError('content')
+        raise APIValueError('content', 'content cannot be empty.')
     blog = yield from Blog.find(id)
     if blog is None:
         raise APIResourceNotFoundError('Blog')
-    comment = Comment(blog_id=blog.id, user_id=user.id, user_name=user.name, user_image=user.image,
-                      content=content.strip())
+    comment = Comment(blog_id=blog.id, user_id=user.id, user_name=user.name, user_image=user.image, content=content.strip())
     yield from comment.save()
     return comment
 
 
 # 评论删除api
 @post('/api/comments/{id}/delete')
+@asyncio.coroutine
 def api_delete_comments(id, request):
     check_admin(request)
     c = yield from Comment.find(id)
@@ -305,16 +311,18 @@ def api_delete_comments(id, request):
 
 # 用户列表api
 @get('/api/users')
+@asyncio.coroutine
 def api_get_users(*, page='1'):
     page_index = get_page_index(page)
     num = yield from User.findNumber('count(id)')
     p = Page(num, page_index)
     if num == 0:
         return dict(page=p, users=())
-    users = User.findAll(orderBy='created_at desc', limit=(p.offset, p.limit))
+    users = yield from User.findAll(orderBy='created_at desc', limit=(p.offset, p.limit))
+    logging.info('The number of users in manage: %s' % len(users))
     for u in users:
         u.passwd = '******'
-    return dict(page=p, users=())
+    return dict(page=p, users=users)
 
 
 # 获取博客列表api
@@ -330,11 +338,13 @@ def api_blogs(*, page='1'):
         return dict(page=p, blogs=())
     # 根据limit选出当前页展示的博客
     blogs = yield from Blog.findAll(orderBy='created_at desc',limit=(p.offset, p.limit))
+    logging.info('The number of blogs in manage: %s' % len(blogs))
     return dict(page=p, blogs=blogs)
 
 
 # 获取单个博客api
 @get('/api/blogs/{id}')
+@asyncio.coroutine
 def api_get_blog(*, id):
     blog = yield from Blog.find(id)
     return blog
@@ -359,6 +369,7 @@ def api_create_blogs(request, *, name, summary, content):
 
 # 更新博客api
 @post('/api/blogs/{id}')
+@asyncio.coroutine
 def api_update_blog(id, request, *, name, summary, content):
     check_admin(request)
     blog = yield from Blog.find(id)
@@ -377,6 +388,7 @@ def api_update_blog(id, request, *, name, summary, content):
 
 # 删除博客
 @post('/api/blogs/{id}/delete')
+@asyncio.coroutine
 def api_delete_blog(request, *, id):
     check_admin(request)
     blog = yield from Blog.find(id)
