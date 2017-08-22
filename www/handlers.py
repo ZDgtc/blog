@@ -6,12 +6,12 @@ import hashlib
 import json
 import logging
 
-from .coroweb import get, post
+from www.coroweb import get, post
 from db.models import User, Blog, Comment,next_id
-from .apis import APIError, APIPermissionError, APIResourceNotFoundError, APIValueError, Page
+from www.apis import APIError, APIPermissionError, APIResourceNotFoundError, APIValueError, Page
 from aiohttp import web
-from .config.config import configs
-from .markdown2 import markdown
+from www.config.config import configs
+from www.markdown2 import markdown
 
 _RE_EMAIL = re.compile(r'^[a-zA-Z0-9._-]+@([a-zA-Z0-9_-])+(\.[a-zA-Z0-9_-]+){1,4}$')
 _RE_SHA1 = re.compile(r'^[0-9a-f]{40}$')
@@ -82,18 +82,19 @@ def get_page_index(page_str):
 # 首页渲染
 @get('/')
 @asyncio.coroutine
-def index(request):
-    summary = 'Lorem ipsum dolor sit amet, consectetur adipisicing elit, ' \
-              'sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.'
-    blogs = [
-        Blog(id='1', name='Test Blog', summary=summary, created_at=time.time() - 120),
-        Blog(id='2', name='Something New', summary=summary, created_at=time.time() - 3600),
-        Blog(id='3', name='Learn Swift', summary=summary, created_at=time.time() - 7200)
-    ]
+def index(request, * ,page='1'):
+    page_index = get_page_index(page)
+    num = yield from Blog.findNumber('count(id)')
+    page = Page(num, page_index)
+    if num == 0:
+        blogs = []
+    else:
+        blogs = yield from Blog.findAll(orderBy='created_at desc', limit=(page.offset, page.limit))
     return {
         '__template__': 'blogs.html',
         'blogs': blogs,
-        '__user__': request.__user__ if request.__user__ else None
+        'page': page,
+        '__user__': request.__user__,
     }
 
 
@@ -187,8 +188,8 @@ def signout(request):
 
 
 # 获取博客详细内容api，截留blogs/后面的内容作为参数id
-@get('blogs/{id}')
-def get_blog(id):
+@get('/blog/{id}')
+def get_blog(request, *, id):
     blog = yield from Blog.find(id)
     comments = yield from Comment.findAll('blog_id=?', [id], orderBy='created_at desc')
     # 格式化为符合html的文本
@@ -198,7 +199,8 @@ def get_blog(id):
     return {
         '__template__': 'blog.html',
         'blog': blog,
-        'comments': comments
+        'comments': comments,
+        '__user__': request.__user__
     }
 
 
@@ -210,19 +212,21 @@ def manage():
 
 # 评论列表页
 @get('/manage/comments')
-def manage_comments(*, page='1'):
+def manage_comments(request, *, page='1'):
     return {
         '__template__': 'manage_comments.html',
-        'page_index': get_page_index(page)
+        'page_index': get_page_index(page),
+        '__user__': request.__user__
     }
 
 
 # 博客管理页
 @get('/manage/blogs')
-def manage_blogs(*, page='1'):
+def manage_blogs(request, *, page='1'):
     return {
         '__template__': 'manage_blogs.html',
-        'page_index': get_page_index(page)
+        'page_index': get_page_index(page),
+        'user': request.__user__
     }
 
 
@@ -238,12 +242,13 @@ def manage_create_blog(request):
 
 
 # 博客修改页
-@get('/manage/blogs/edit')
-def manage_edit_blog(*, id):
+@get('/manage/blogs/edit/{id}')
+def manage_edit_blog(id, request):
     return {
         '__template__': 'manage_blog_edit.html',
         'id': id,
-        'action': '/api/blogs/%s' % id
+        'action': '/api/blogs/%s' % id,
+        'user': request.__user__,
     }
 
 
@@ -256,7 +261,7 @@ def manage_users(*, page='1'):
     }
 
 
-# 获取某一页显示的评论api
+# 获取某一页所显示的评论api
 def api_comments(*, page='1'):
     page_index = get_page_index(page)
     # 评论数
@@ -268,6 +273,71 @@ def api_comments(*, page='1'):
         return dict(page=p, comments=())
     comments = yield from Comment.findAll(orderBy='created_at desc', limit=(p.offset, p.limit))
     return dict(page=p, comments=comments)
+
+
+# 评论创建api
+@post('/api/blog/{id}/comments')
+def api_create_comment(id, request, *, content):
+    user = request.__user__
+    if user is None:
+        raise APIPermissionError('Please signin first')
+    if not content or not content.strip():
+        raise APIValueError('content')
+    blog = yield from Blog.find(id)
+    if blog is None:
+        raise APIResourceNotFoundError('Blog')
+    comment = Comment(blog_id=blog.id, user_id=user.id, user_name=user.name, user_image=user.image,
+                      content=content.strip())
+    yield from comment.save()
+    return comment
+
+
+# 评论删除api
+@post('/api/comments/{id}/delete')
+def api_delete_comments(id, request):
+    check_admin(request)
+    c = yield from Comment.find(id)
+    if c is None:
+        raise APIResourceNotFoundError('Comment')
+    yield from c.remove()
+    return dict(id=id)
+
+
+# 用户列表api
+@get('/api/users')
+def api_get_users(*, page='1'):
+    page_index = get_page_index(page)
+    num = yield from User.findNumber('count(id)')
+    p = Page(num, page_index)
+    if num == 0:
+        return dict(page=p, users=())
+    users = User.findAll(orderBy='created_at desc', limit=(p.offset, p.limit))
+    for u in users:
+        u.passwd = '******'
+    return dict(page=p, users=())
+
+
+# 获取博客列表api
+@get('/api/blogs')
+@asyncio.coroutine
+def api_blogs(*, page='1'):
+    # 把page转化为整型
+    page_index = get_page_index(page)
+    # 查询日志条数
+    num = yield from Blog.findNumber('count(id)')
+    p = Page(num, page_index)
+    if num == 0:
+        return dict(page=p, blogs=())
+    # 根据limit选出当前页展示的博客
+    blogs = yield from Blog.findAll(orderBy='created_at desc',limit=(p.offset, p.limit))
+    return dict(page=p, blogs=blogs)
+
+
+# 获取单个博客api
+@get('/api/blogs/{id}')
+def api_get_blog(*, id):
+    blog = yield from Blog.find(id)
+    return blog
 
 
 # 博客创建api
@@ -287,19 +357,28 @@ def api_create_blogs(request, *, name, summary, content):
     return blog
 
 
-# 获取博客列表api
-@get('/api/blogs')
-@asyncio.coroutine
-def api_blogs(*, page='1'):
-    # 把page转化为整型
-    page_index = get_page_index(page)
-    # 查询日志条数
-    num = yield from Blog.findNumber('count(id)')
-    p = Page(num, page_index)
-    if num == 0:
-        return dict(page=p, blogs=())
-    # 根据limit选出当前页展示的博客
-    blogs = yield from Blog.findAll(orderBy='created_at desc',limit=(p.offset, p.limit))
-    return dict(page=p, blogs=blogs)
+# 更新博客api
+@post('/api/blogs/{id}')
+def api_update_blog(id, request, *, name, summary, content):
+    check_admin(request)
+    blog = yield from Blog.find(id)
+    if not name or not name.strip():
+        raise APIValueError('name', 'name cannot be empty.')
+    if not summary or not summary.strip():
+        raise APIValueError('summary', 'summary cannot be empty.')
+    if not content or not content.strip():
+        raise APIValueError('content', 'content cannot be empty.')
+    blog.name = name.strip()
+    blog.summary = summary.strip()
+    blog.content = content.strip()
+    yield from blog.update()
+    return blog
 
 
+# 删除博客
+@post('/api/blogs/{id}/delete')
+def api_delete_blog(request, *, id):
+    check_admin(request)
+    blog = yield from Blog.find(id)
+    yield from blog.remove()
+    return dict(id=id)

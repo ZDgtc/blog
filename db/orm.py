@@ -71,17 +71,17 @@ def execute(sql, args, autocommit=True):
                 yield from conn.commit()
         except BaseException:
             if not autocommit:
-                yield from conn.commit()
+                yield from conn.rollback()
             raise
         return affected
 
 
 # 用于返回__insert__语句的占位符
 def create_args_string(num):
-    l = []
+    L = []
     for n in range(num):
-        l.append('?')
-    return ', '.join(l)
+        L.append('?')
+    return ', '.join(L)
 
 
 class Field(object):
